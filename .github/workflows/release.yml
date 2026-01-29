@@ -1,0 +1,205 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      bump-type:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get latest tag
+        id: latest-tag
+        run: |
+          # Get the latest semver tag
+          LATEST=$(git tag -l 'v*.*.*' | sort -V | tail -n1)
+          if [[ -z "$LATEST" ]]; then
+            LATEST="v0.0.0"
+          fi
+          echo "tag=$LATEST" >> $GITHUB_OUTPUT
+          echo "Latest tag: $LATEST"
+
+      - name: Determine bump type from commits
+        id: bump-type
+        if: github.event_name == 'push'
+        run: |
+          LATEST_TAG="${{ steps.latest-tag.outputs.tag }}"
+
+          # Get commits since last tag
+          if [[ "$LATEST_TAG" == "v0.0.0" ]]; then
+            COMMITS=$(git log --oneline)
+          else
+            COMMITS=$(git log --oneline ${LATEST_TAG}..HEAD)
+          fi
+
+          echo "Commits since $LATEST_TAG:"
+          echo "$COMMITS"
+          echo ""
+
+          # Determine bump type from conventional commits
+          if echo "$COMMITS" | grep -qE '^[a-f0-9]+ (feat|fix|docs|style|refactor|perf|test|chore)(\(.+\))?!:|BREAKING CHANGE'; then
+            BUMP="major"
+          elif echo "$COMMITS" | grep -qE '^[a-f0-9]+ feat(\(.+\))?:'; then
+            BUMP="minor"
+          elif echo "$COMMITS" | grep -qE '^[a-f0-9]+ (fix|docs|style|refactor|perf|test|chore)(\(.+\))?:'; then
+            BUMP="patch"
+          else
+            # Default to patch for non-conventional commits
+            BUMP="patch"
+          fi
+
+          echo "Determined bump type: $BUMP"
+          echo "type=$BUMP" >> $GITHUB_OUTPUT
+
+      - name: Set bump type
+        id: final-bump
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "type=${{ inputs.bump-type }}" >> $GITHUB_OUTPUT
+          else
+            echo "type=${{ steps.bump-type.outputs.type }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Calculate new version
+        id: new-version
+        run: |
+          CURRENT="${{ steps.latest-tag.outputs.tag }}"
+          BUMP="${{ steps.final-bump.outputs.type }}"
+
+          # Remove 'v' prefix
+          VERSION=${CURRENT#v}
+
+          # Split into parts
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+
+          case $BUMP in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+
+          NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          MAJOR_TAG="v${MAJOR}"
+
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "major-tag=$MAJOR_TAG" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION (major tag: $MAJOR_TAG)"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          LATEST_TAG="${{ steps.latest-tag.outputs.tag }}"
+          NEW_VERSION="${{ steps.new-version.outputs.version }}"
+
+          echo "## What's Changed in $NEW_VERSION" > changelog.md
+          echo "" >> changelog.md
+
+          # Get commits since last tag
+          if [[ "$LATEST_TAG" == "v0.0.0" ]]; then
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --reverse)
+          else
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --reverse ${LATEST_TAG}..HEAD)
+          fi
+
+          # Categorize commits
+          FEATURES=$(echo "$COMMITS" | grep -E "^- feat" || true)
+          FIXES=$(echo "$COMMITS" | grep -E "^- fix" || true)
+          OTHER=$(echo "$COMMITS" | grep -vE "^- (feat|fix)" || true)
+
+          if [[ -n "$FEATURES" ]]; then
+            echo "### Features" >> changelog.md
+            echo "$FEATURES" | sed 's/^- feat[^:]*: /- /' >> changelog.md
+            echo "" >> changelog.md
+          fi
+
+          if [[ -n "$FIXES" ]]; then
+            echo "### Bug Fixes" >> changelog.md
+            echo "$FIXES" | sed 's/^- fix[^:]*: /- /' >> changelog.md
+            echo "" >> changelog.md
+          fi
+
+          if [[ -n "$OTHER" ]]; then
+            echo "### Other Changes" >> changelog.md
+            echo "$OTHER" >> changelog.md
+            echo "" >> changelog.md
+          fi
+
+          echo "" >> changelog.md
+          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LATEST_TAG}...${NEW_VERSION}" >> changelog.md
+
+          cat changelog.md
+
+      - name: Create exact version tag
+        run: |
+          NEW_VERSION="${{ steps.new-version.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$NEW_VERSION" -m "Release $NEW_VERSION"
+          git push origin "$NEW_VERSION"
+
+      - name: Update major version tag
+        run: |
+          MAJOR_TAG="${{ steps.new-version.outputs.major-tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -fa "$MAJOR_TAG" -m "Update $MAJOR_TAG to ${{ steps.new-version.outputs.version }}"
+          git push origin "$MAJOR_TAG" --force
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.new-version.outputs.version }}
+          name: ${{ steps.new-version.outputs.version }}
+          body_path: changelog.md
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "## 🚀 Release Created" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ steps.new-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Major Tag**: ${{ steps.new-version.outputs.major-tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bump Type**: ${{ steps.final-bump.outputs.type }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Usage" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`yaml" >> $GITHUB_STEP_SUMMARY
+          echo "# Recommended: Use major version tag" >> $GITHUB_STEP_SUMMARY
+          echo "uses: ${{ github.repository }}/actions/eslint-js-prefix@${{ steps.new-version.outputs.major-tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# Pinned: Use exact version" >> $GITHUB_STEP_SUMMARY
+          echo "uses: ${{ github.repository }}/actions/eslint-js-prefix@${{ steps.new-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

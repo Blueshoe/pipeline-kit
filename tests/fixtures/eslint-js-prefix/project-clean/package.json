@@ -1,0 +1,9 @@
+{
+  "name": "project-clean",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Test fixture with valid js- prefix selectors",
+  "dependencies": {
+    "react": "^18.0.0"
+  }
+}

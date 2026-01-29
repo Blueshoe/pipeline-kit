@@ -1,0 +1,113 @@
+# =============================================================================
+# Test Workflow
+# =============================================================================
+#
+# Runs unit tests and integration tests for all actions in this repository.
+# Triggered on every push and pull request.
+#
+# =============================================================================
+
+name: Test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Unit Tests - Test the ESLint plugin directly
+  # ---------------------------------------------------------------------------
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Run plugin tests
+        working-directory: actions/eslint-js-prefix/plugin
+        run: |
+          npm install
+          npm test
+
+  # ---------------------------------------------------------------------------
+  # Integration Tests - Test the full GitHub Action
+  # ---------------------------------------------------------------------------
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        fixture:
+          - name: project-clean
+            expected-violations: 0
+            should-fail: false
+          - name: project-violations
+            expected-violations: 5
+            should-fail: true
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run action on ${{ matrix.fixture.name }}
+        id: lint
+        uses: ./actions/eslint-js-prefix
+        continue-on-error: true
+        with:
+          working-directory: tests/fixtures/eslint-js-prefix/${{ matrix.fixture.name }}
+
+      - name: Verify results
+        run: |
+          VIOLATIONS="${{ steps.lint.outputs.violations }}"
+          EXPECTED="${{ matrix.fixture.expected-violations }}"
+          SHOULD_FAIL="${{ matrix.fixture.should-fail }}"
+          OUTCOME="${{ steps.lint.outcome }}"
+
+          echo "Violations: $VIOLATIONS (expected: $EXPECTED)"
+          echo "Outcome: $OUTCOME (should fail: $SHOULD_FAIL)"
+
+          # Check violation count
+          if [[ "$VIOLATIONS" != "$EXPECTED" ]]; then
+            echo "❌ Wrong violation count"
+            exit 1
+          fi
+
+          # Check exit status matches expectation
+          if [[ "$SHOULD_FAIL" == "true" && "$OUTCOME" != "failure" ]]; then
+            echo "❌ Action should have failed"
+            exit 1
+          fi
+          if [[ "$SHOULD_FAIL" == "false" && "$OUTCOME" != "success" ]]; then
+            echo "❌ Action should have succeeded"
+            exit 1
+          fi
+
+          echo "✅ Test passed"
+
+  # ---------------------------------------------------------------------------
+  # Framework Detection Test - Verify auto-detection works
+  # ---------------------------------------------------------------------------
+  framework-detection:
+    name: Framework Detection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Test with React project (auto-detect on)
+        uses: ./actions/eslint-js-prefix
+        with:
+          working-directory: tests/fixtures/eslint-js-prefix/project-clean
+          # auto-detect: true (default) - should detect React and allow data-testid
+
+  # ---------------------------------------------------------------------------
+  # Final Check - All tests must pass
+  # ---------------------------------------------------------------------------
+  all-tests-passed:
+    name: All Tests Passed
+    needs: [unit-tests, integration-tests, framework-detection]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "✅ All tests passed!"

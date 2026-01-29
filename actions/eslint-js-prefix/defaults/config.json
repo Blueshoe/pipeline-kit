@@ -1,0 +1,13 @@
+{
+  "prefix": "js-",
+  "fileExtensions": ["js", "jsx", "ts", "tsx", "vue"],
+  "allowedPatterns": [],
+  "ignoredSelectors": ["html", "body", "head"],
+  "frameworkPatterns": {
+    "react": ["^data-testid$", "^data-test$"],
+    "vue": ["^ref$"],
+    "angular": ["^ng-"],
+    "cypress": ["^data-cy$", "^data-cy-"],
+    "playwright": ["^data-testid$", "^data-pw$"]
+  }
+}
