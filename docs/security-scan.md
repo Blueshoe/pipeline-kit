@@ -36,6 +36,10 @@ Run automated security scans on a schedule (or on every push) with automatic pac
 | `npm-package-path` | `''` | Path to directory containing package-lock.json |
 | `severity-threshold` | `'high'` | Minimum severity to report: `low`, `medium`, `high`, `critical` |
 | `fail-on-vulnerabilities` | `'false'` | Fail the action if vulnerabilities are found |
+| `webhook-url` | `''` | Webhook API base URL to report results to |
+| `webhook-api-key` | `''` | API key for webhook authentication (sent as `X-API-Key` header) |
+| `webhook-repository-url` | `''` | Git repository URL to include in the report (defaults to current repo) |
+| `webhook-release` | `''` | Release name to associate with the report |
 
 ## Outputs
 
@@ -115,6 +119,36 @@ jobs:
     working-directory: './backend'
     npm-package-path: './frontend'
 ```
+
+### Report to Webhook
+
+```yaml
+- uses: Blueshoe/pipeline-kit/actions/security-scan@v1
+  with:
+    webhook-url: 'https://watchdog.blueshoe.de'
+    webhook-api-key: ${{ secrets.WEBHOOK_API_KEY }}
+    webhook-release: 'v1.2.3'
+```
+
+The action sends raw scan results to two endpoints on the configured base URL:
+
+- `POST {webhook-url}/api/reports/pip-audit` — Python results
+- `POST {webhook-url}/api/reports/npm` — NPM results
+
+Each request body follows this format:
+
+```json
+{
+  "repository_url": "https://github.com/org/repo",
+  "report_data": { "...raw tool output..." },
+  "scanned_at": "2026-03-20T10:00:00Z",
+  "release": "v1.2.3"
+}
+```
+
+The `report_data` field contains the unmodified JSON output from pip-audit or npm audit. The repository URL defaults to the current GitHub repository. Reporting is completely optional — if `webhook-url` or `webhook-api-key` are not set, the step is skipped. Failures in reporting are non-blocking (warnings only).
+
+Any backend implementing these two endpoints can receive reports from this action.
 
 ## Results JSON Format
 

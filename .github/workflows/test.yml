@@ -309,11 +309,64 @@ jobs:
           echo "✅ uv scan test passed"
 
   # ---------------------------------------------------------------------------
+  # Security Scan - Webhook reporting
+  # ---------------------------------------------------------------------------
+  security-scan-webhook:
+    name: Security Scan - Webhook
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Run security scan with webhook reporting
+        id: scan
+        uses: ./actions/security-scan
+        with:
+          working-directory: tests/fixtures/security-scan/python-pip
+          npm-package-path: ${{ github.workspace }}/tests/fixtures/security-scan/npm-vulnerable
+          severity-threshold: 'low'
+          webhook-url: ${{ vars.WATCHDOG_URL }}
+          webhook-api-key: ${{ secrets.WATCHDOG_API_KEY }}
+          webhook-release: ${{ github.sha }}
+
+      - name: Verify scan completed
+        run: |
+          COUNT="${{ steps.scan.outputs.total-vulnerabilities }}"
+          echo "Total vulnerabilities reported: $COUNT"
+          echo "✅ Webhook reporting test completed"
+
+  # ---------------------------------------------------------------------------
   # Final Check - All tests must pass
   # ---------------------------------------------------------------------------
   all-tests-passed:
     name: All Tests Passed
-    needs: [unit-tests, integration-tests, framework-detection, security-scan-python-pip, security-scan-npm, security-scan-skip-all, security-scan-python-poetry, security-scan-python-uv]
+    needs: [unit-tests, integration-tests, framework-detection, security-scan-python-pip, security-scan-npm, security-scan-skip-all, security-scan-python-poetry, security-scan-python-uv, security-scan-webhook]
+    if: always()
     runs-on: ubuntu-latest
     steps:
-      - run: echo "✅ All tests passed!"
+      - name: Check required jobs
+        run: |
+          # Webhook test is optional (may lack secrets on PRs from forks)
+          REQUIRED='${{ needs.unit-tests.result }} ${{ needs.integration-tests.result }} ${{ needs.framework-detection.result }} ${{ needs.security-scan-python-pip.result }} ${{ needs.security-scan-npm.result }} ${{ needs.security-scan-skip-all.result }} ${{ needs.security-scan-python-poetry.result }} ${{ needs.security-scan-python-uv.result }}'
+
+          for result in $REQUIRED; do
+            if [[ "$result" != "success" ]]; then
+              echo "❌ A required job failed: $result"
+              exit 1
+            fi
+          done
+
+          WEBHOOK='${{ needs.security-scan-webhook.result }}'
+          if [[ "$WEBHOOK" == "failure" ]]; then
+            echo "⚠️ Webhook test failed (non-blocking)"
+          fi
+
+          echo "✅ All tests passed!"

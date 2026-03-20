@@ -65,6 +65,26 @@ inputs:
     required: false
     default: 'false'
 
+  webhook-url:
+    description: 'Webhook API base URL to report results (e.g. https://watchdog.blueshoe.de)'
+    required: false
+    default: ''
+
+  webhook-api-key:
+    description: 'API key for webhook authentication (sent as X-API-Key header)'
+    required: false
+    default: ''
+
+  webhook-repository-url:
+    description: 'Git repository URL to include in the report (defaults to current GitHub repository)'
+    required: false
+    default: ''
+
+  webhook-release:
+    description: 'Release name to associate with the report'
+    required: false
+    default: ''
+
 # =============================================================================
 # OUTPUTS
 # =============================================================================
@@ -142,6 +162,21 @@ runs:
         FAIL_ON_VULNERABILITIES: ${{ inputs.fail-on-vulnerabilities }}
         ACTION_PATH: ${{ github.action_path }}
       run: ${{ github.action_path }}/scripts/create-summary.sh
+
+    - name: Report to webhook
+      if: always() && inputs.webhook-url != '' && inputs.webhook-api-key != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        WEBHOOK_URL: ${{ inputs.webhook-url }}
+        WEBHOOK_API_KEY: ${{ inputs.webhook-api-key }}
+        WEBHOOK_REPOSITORY_URL: ${{ inputs.webhook-repository-url || format('{0}/{1}', github.server_url, github.repository) }}
+        WEBHOOK_RELEASE: ${{ inputs.webhook-release }}
+        SCAN_PYTHON: ${{ inputs.scan-python }}
+        SCAN_NPM: ${{ inputs.scan-npm }}
+        PYTHON_RESULT: ${{ steps.python.outputs.result_file }}
+        NPM_RESULT: ${{ steps.npm.outputs.result_file }}
+      run: ${{ github.action_path }}/scripts/report-webhook.sh
 
     - name: Cleanup
       if: always()
