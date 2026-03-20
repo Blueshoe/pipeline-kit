@@ -2,23 +2,20 @@
 # =============================================================================
 # Install Scanning Tools
 # =============================================================================
-# Installs pip-audit for Python dependency scanning.
-#
-# Required env vars:
-#   SCAN_PYTHON - "true" to install pip-audit
+# Installs osv-scanner for dependency vulnerability scanning.
 # =============================================================================
 
 set -e
 
-if [[ "$SCAN_PYTHON" == "true" ]]; then
-  echo "::group::Install pip-audit"
-  pip install pip-audit 2>&1
-  echo "::endgroup::"
+echo "::group::Install osv-scanner"
+curl -fsSL https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64 \
+  -o /usr/local/bin/osv-scanner
+chmod +x /usr/local/bin/osv-scanner
+echo "::endgroup::"
 
-  # Verify installation
-  if ! command -v pip-audit &> /dev/null; then
-    echo "::error::pip-audit installation failed"
-    exit 1
-  fi
-  echo "✓ pip-audit installed"
+if ! command -v osv-scanner &> /dev/null; then
+  echo "::error::osv-scanner installation failed"
+  exit 1
 fi
+
+echo "✓ $(osv-scanner --version | head -1)"

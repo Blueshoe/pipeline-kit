@@ -103,7 +103,7 @@ jobs:
           # auto-detect: true (default) - should detect React and allow data-testid
 
   # ---------------------------------------------------------------------------
-  # Security Scan - Python pip
+  # Security Scan - Python pip (requirements.txt)
   # ---------------------------------------------------------------------------
   security-scan-python-pip:
     name: Security Scan - Python (pip)
@@ -152,10 +152,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-
       - name: Run security scan on NPM fixture
         id: scan
         uses: ./actions/security-scan
@@ -192,6 +188,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
       - name: Run security scan with all scans disabled
         id: scan
@@ -233,9 +233,6 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install poetry
-        run: pip install poetry
-
       - name: Run security scan on Poetry fixture
         id: scan
         uses: ./actions/security-scan
@@ -272,13 +269,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
 
       - name: Run security scan on uv fixture
         id: scan
@@ -322,16 +312,11 @@ jobs:
         with:
           python-version: '3.12'
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-
       - name: Run security scan with webhook reporting
         id: scan
         uses: ./actions/security-scan
         with:
           working-directory: tests/fixtures/security-scan/python-pip
-          npm-package-path: ${{ github.workspace }}/tests/fixtures/security-scan/npm-vulnerable
           severity-threshold: 'low'
           webhook-url: ${{ vars.WATCHDOG_URL }}
           webhook-api-key: ${{ secrets.WATCHDOG_API_KEY }}

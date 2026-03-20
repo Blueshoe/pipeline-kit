@@ -60,17 +60,12 @@ document.querySelector('.js-delete-button')
 
 ## security-scan
 
-Scans Python and NPM dependencies for known vulnerabilities. Supports automatic package manager detection (pip, poetry, uv).
+Scans Python and NPM dependencies for known vulnerabilities using [osv-scanner](https://github.com/google/osv-scanner). Reads lock files directly — no package manager installation needed.
 
 ### Quick Start
 
 ```yaml
-- uses: actions/setup-python@v5
-  with:
-    python-version: '3.12'
 - uses: Blueshoe/pipeline-kit/actions/security-scan@v1
-  with:
-    severity-threshold: 'high'
 ```
 
 ### Scheduled Weekly Scan
@@ -86,13 +81,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
       - uses: Blueshoe/pipeline-kit/actions/security-scan@v1
+        with:
+          severity-threshold: 'high'
 ```
 
-📖 **[Full Documentation](docs/security-scan.md)** – All inputs, outputs, package manager detection, and examples.
+### Report to Webhook
+
+```yaml
+- uses: Blueshoe/pipeline-kit/actions/security-scan@v1
+  with:
+    webhook-url: ${{ vars.WATCHDOG_URL }}
+    webhook-api-key: ${{ secrets.WATCHDOG_API_KEY }}
+```
+
+Supported lock files: `requirements.txt`, `poetry.lock`, `uv.lock`, `package-lock.json`
+
+📖 **[Full Documentation](docs/security-scan.md)** – All inputs, outputs, and examples.
 
 ---
 

@@ -2,8 +2,12 @@
 # Security Scan
 # =============================================================================
 #
-# Scans Python and NPM dependencies for known vulnerabilities.
-# Supports automatic package manager detection for Python (pip, poetry, uv).
+# Scans Python and NPM dependencies for known vulnerabilities using osv-scanner.
+# Reads lock files directly — no package manager installation needed.
+#
+# Supported lock files:
+#   Python: requirements.txt, poetry.lock, uv.lock
+#   NPM:    package-lock.json
 #
 # Usage:
 #   - uses: Blueshoe/pipeline-kit/actions/security-scan@v1
@@ -39,21 +43,6 @@ inputs:
     description: 'Working directory for scanning'
     required: false
     default: '.'
-
-  python-requirements-path:
-    description: 'Manual path to requirements.txt (skips auto-detection)'
-    required: false
-    default: ''
-
-  python-package-manager:
-    description: 'Python package manager: auto, pip, poetry, uv'
-    required: false
-    default: 'auto'
-
-  npm-package-path:
-    description: 'Path to directory containing package-lock.json'
-    required: false
-    default: ''
 
   severity-threshold:
     description: 'Minimum severity to report: low, medium, high, critical'
@@ -117,34 +106,20 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    - name: Install scanning tools
+    - name: Install osv-scanner
       shell: bash
-      env:
-        SCAN_PYTHON: ${{ inputs.scan-python }}
       run: ${{ github.action_path }}/scripts/install-tools.sh
 
-    - name: Scan Python dependencies
-      id: python
-      if: inputs.scan-python == 'true'
+    - name: Scan dependencies
+      id: scan
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
-        REQUIREMENTS_PATH: ${{ inputs.python-requirements-path }}
-        PACKAGE_MANAGER: ${{ inputs.python-package-manager }}
+        SCAN_PYTHON: ${{ inputs.scan-python }}
+        SCAN_NPM: ${{ inputs.scan-npm }}
         SEVERITY_THRESHOLD: ${{ inputs.severity-threshold }}
         ACTION_PATH: ${{ github.action_path }}
-      run: ${{ github.action_path }}/scripts/scan-python.sh
-
-    - name: Scan NPM dependencies
-      id: npm
-      if: inputs.scan-npm == 'true'
-      shell: bash
-      working-directory: ${{ inputs.working-directory }}
-      env:
-        NPM_PACKAGE_PATH: ${{ inputs.npm-package-path }}
-        SEVERITY_THRESHOLD: ${{ inputs.severity-threshold }}
-        ACTION_PATH: ${{ github.action_path }}
-      run: ${{ github.action_path }}/scripts/scan-npm.sh
+      run: ${{ github.action_path }}/scripts/scan.sh
 
     - name: Create summary
       id: summary
@@ -154,10 +129,10 @@ runs:
       env:
         SCAN_PYTHON: ${{ inputs.scan-python }}
         SCAN_NPM: ${{ inputs.scan-npm }}
-        PYTHON_RESULT: ${{ steps.python.outputs.result_file }}
-        NPM_RESULT: ${{ steps.npm.outputs.result_file }}
-        PYTHON_COUNT: ${{ steps.python.outputs.vulnerability_count }}
-        NPM_COUNT: ${{ steps.npm.outputs.vulnerability_count }}
+        PYTHON_RESULT: ${{ steps.scan.outputs.python_result_file }}
+        NPM_RESULT: ${{ steps.scan.outputs.npm_result_file }}
+        PYTHON_COUNT: ${{ steps.scan.outputs.python_count }}
+        NPM_COUNT: ${{ steps.scan.outputs.npm_count }}
         SEVERITY_THRESHOLD: ${{ inputs.severity-threshold }}
         FAIL_ON_VULNERABILITIES: ${{ inputs.fail-on-vulnerabilities }}
         ACTION_PATH: ${{ github.action_path }}
@@ -174,8 +149,8 @@ runs:
         WEBHOOK_RELEASE: ${{ inputs.webhook-release }}
         SCAN_PYTHON: ${{ inputs.scan-python }}
         SCAN_NPM: ${{ inputs.scan-npm }}
-        PYTHON_RESULT: ${{ steps.python.outputs.result_file }}
-        NPM_RESULT: ${{ steps.npm.outputs.result_file }}
+        PYTHON_RESULT: ${{ steps.scan.outputs.python_result_file }}
+        NPM_RESULT: ${{ steps.scan.outputs.npm_result_file }}
       run: ${{ github.action_path }}/scripts/report-webhook.sh
 
     - name: Cleanup
