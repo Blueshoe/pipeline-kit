@@ -171,7 +171,7 @@ EOF
   fi
 
   # Detail tables from aggregated results
-  python3 << PYEOF
+  python3 << PYEOF >> "$GITHUB_STEP_SUMMARY"
 import json
 
 with open("${RESULTS_FILE}") as f:
@@ -213,7 +213,6 @@ if npm_vulns:
         lines.append(f"| \`{v['package']}\` | {v['version']} | {v['severity']} | {v.get('cvss_score', '-')} | {ids} |")
     print("\n".join(lines))
 PYEOF
-  >> "$GITHUB_STEP_SUMMARY"
 
 else
   cat >> "$GITHUB_STEP_SUMMARY" << EOF

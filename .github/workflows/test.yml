@@ -111,10 +111,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
       - name: Run security scan on Python fixture
         id: scan
         uses: ./actions/security-scan
@@ -189,10 +185,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
       - name: Run security scan with all scans disabled
         id: scan
         uses: ./actions/security-scan
@@ -228,10 +220,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
 
       - name: Run security scan on Poetry fixture
         id: scan
@@ -307,10 +295,6 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v6
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
 
       - name: Run security scan with webhook reporting
         id: scan
