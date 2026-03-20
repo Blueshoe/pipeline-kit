@@ -103,11 +103,129 @@ jobs:
           # auto-detect: true (default) - should detect React and allow data-testid
 
   # ---------------------------------------------------------------------------
+  # Security Scan - Python pip
+  # ---------------------------------------------------------------------------
+  security-scan-python-pip:
+    name: Security Scan - Python (pip)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run security scan on Python fixture
+        id: scan
+        uses: ./actions/security-scan
+        with:
+          working-directory: tests/fixtures/security-scan/python-pip
+          scan-npm: 'false'
+          severity-threshold: 'low'
+
+      - name: Verify Python results
+        run: |
+          COUNT="${{ steps.scan.outputs.total-vulnerabilities }}"
+          HAS="${{ steps.scan.outputs.has-vulnerabilities }}"
+
+          echo "Vulnerabilities: $COUNT"
+          echo "Has vulnerabilities: $HAS"
+
+          if [[ "$COUNT" -eq 0 ]]; then
+            echo "❌ Expected vulnerabilities > 0"
+            exit 1
+          fi
+
+          if [[ "$HAS" != "true" ]]; then
+            echo "❌ Expected has-vulnerabilities to be true"
+            exit 1
+          fi
+
+          echo "✅ Python scan test passed"
+
+  # ---------------------------------------------------------------------------
+  # Security Scan - NPM
+  # ---------------------------------------------------------------------------
+  security-scan-npm:
+    name: Security Scan - NPM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Run security scan on NPM fixture
+        id: scan
+        uses: ./actions/security-scan
+        with:
+          working-directory: tests/fixtures/security-scan/npm-vulnerable
+          scan-python: 'false'
+          severity-threshold: 'low'
+
+      - name: Verify NPM results
+        run: |
+          COUNT="${{ steps.scan.outputs.total-vulnerabilities }}"
+          HAS="${{ steps.scan.outputs.has-vulnerabilities }}"
+
+          echo "Vulnerabilities: $COUNT"
+          echo "Has vulnerabilities: $HAS"
+
+          if [[ "$COUNT" -eq 0 ]]; then
+            echo "❌ Expected vulnerabilities > 0"
+            exit 1
+          fi
+
+          if [[ "$HAS" != "true" ]]; then
+            echo "❌ Expected has-vulnerabilities to be true"
+            exit 1
+          fi
+
+          echo "✅ NPM scan test passed"
+
+  # ---------------------------------------------------------------------------
+  # Security Scan - Skip All
+  # ---------------------------------------------------------------------------
+  security-scan-skip-all:
+    name: Security Scan - Skip All
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run security scan with all scans disabled
+        id: scan
+        uses: ./actions/security-scan
+        with:
+          scan-python: 'false'
+          scan-npm: 'false'
+
+      - name: Verify skip results
+        run: |
+          COUNT="${{ steps.scan.outputs.total-vulnerabilities }}"
+          HAS="${{ steps.scan.outputs.has-vulnerabilities }}"
+
+          echo "Vulnerabilities: $COUNT"
+          echo "Has vulnerabilities: $HAS"
+
+          if [[ "$COUNT" -ne 0 ]]; then
+            echo "❌ Expected total = 0 when all scans skipped"
+            exit 1
+          fi
+
+          if [[ "$HAS" != "false" ]]; then
+            echo "❌ Expected has-vulnerabilities to be false"
+            exit 1
+          fi
+
+          echo "✅ Skip-all test passed"
+
+  # ---------------------------------------------------------------------------
   # Final Check - All tests must pass
   # ---------------------------------------------------------------------------
   all-tests-passed:
     name: All Tests Passed
-    needs: [unit-tests, integration-tests, framework-detection]
+    needs: [unit-tests, integration-tests, framework-detection, security-scan-python-pip, security-scan-npm, security-scan-skip-all]
     runs-on: ubuntu-latest
     steps:
       - run: echo "✅ All tests passed!"

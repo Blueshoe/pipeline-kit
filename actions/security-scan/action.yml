@@ -1,0 +1,150 @@
+# =============================================================================
+# Security Scan
+# =============================================================================
+#
+# Scans Python and NPM dependencies for known vulnerabilities.
+# Supports automatic package manager detection for Python (pip, poetry, uv).
+#
+# Usage:
+#   - uses: Blueshoe/pipeline-kit/actions/security-scan@v1
+#     with:
+#       severity-threshold: 'high'
+#
+# =============================================================================
+
+name: 'Security Scan'
+description: 'Scan Python and NPM dependencies for known vulnerabilities'
+author: 'Blueshoe'
+
+branding:
+  icon: 'shield'
+  color: 'red'
+
+# =============================================================================
+# INPUTS
+# =============================================================================
+
+inputs:
+  scan-python:
+    description: 'Enable Python dependency scanning'
+    required: false
+    default: 'true'
+
+  scan-npm:
+    description: 'Enable NPM dependency scanning'
+    required: false
+    default: 'true'
+
+  working-directory:
+    description: 'Working directory for scanning'
+    required: false
+    default: '.'
+
+  python-requirements-path:
+    description: 'Manual path to requirements.txt (skips auto-detection)'
+    required: false
+    default: ''
+
+  python-package-manager:
+    description: 'Python package manager: auto, pip, poetry, uv'
+    required: false
+    default: 'auto'
+
+  npm-package-path:
+    description: 'Path to directory containing package-lock.json'
+    required: false
+    default: ''
+
+  severity-threshold:
+    description: 'Minimum severity to report: low, medium, high, critical'
+    required: false
+    default: 'high'
+
+  fail-on-vulnerabilities:
+    description: 'Fail the action if vulnerabilities are found'
+    required: false
+    default: 'false'
+
+# =============================================================================
+# OUTPUTS
+# =============================================================================
+
+outputs:
+  python-vulnerabilities:
+    description: 'Number of Python vulnerabilities found'
+    value: ${{ steps.summary.outputs.python_count }}
+
+  npm-vulnerabilities:
+    description: 'Number of NPM vulnerabilities found'
+    value: ${{ steps.summary.outputs.npm_count }}
+
+  total-vulnerabilities:
+    description: 'Total number of vulnerabilities found'
+    value: ${{ steps.summary.outputs.total_count }}
+
+  results-path:
+    description: 'Path to aggregated JSON results file'
+    value: ${{ steps.summary.outputs.results_path }}
+
+  has-vulnerabilities:
+    description: 'Whether any vulnerabilities were found'
+    value: ${{ steps.summary.outputs.has_vulnerabilities }}
+
+# =============================================================================
+# STEPS
+# =============================================================================
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install scanning tools
+      shell: bash
+      env:
+        SCAN_PYTHON: ${{ inputs.scan-python }}
+      run: ${{ github.action_path }}/scripts/install-tools.sh
+
+    - name: Scan Python dependencies
+      id: python
+      if: inputs.scan-python == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        REQUIREMENTS_PATH: ${{ inputs.python-requirements-path }}
+        PACKAGE_MANAGER: ${{ inputs.python-package-manager }}
+        SEVERITY_THRESHOLD: ${{ inputs.severity-threshold }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: ${{ github.action_path }}/scripts/scan-python.sh
+
+    - name: Scan NPM dependencies
+      id: npm
+      if: inputs.scan-npm == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        NPM_PACKAGE_PATH: ${{ inputs.npm-package-path }}
+        SEVERITY_THRESHOLD: ${{ inputs.severity-threshold }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: ${{ github.action_path }}/scripts/scan-npm.sh
+
+    - name: Create summary
+      id: summary
+      if: always()
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        SCAN_PYTHON: ${{ inputs.scan-python }}
+        SCAN_NPM: ${{ inputs.scan-npm }}
+        PYTHON_RESULT: ${{ steps.python.outputs.result_file }}
+        NPM_RESULT: ${{ steps.npm.outputs.result_file }}
+        PYTHON_COUNT: ${{ steps.python.outputs.vulnerability_count }}
+        NPM_COUNT: ${{ steps.npm.outputs.vulnerability_count }}
+        SEVERITY_THRESHOLD: ${{ inputs.severity-threshold }}
+        FAIL_ON_VULNERABILITIES: ${{ inputs.fail-on-vulnerabilities }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: ${{ github.action_path }}/scripts/create-summary.sh
+
+    - name: Cleanup
+      if: always()
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: ${{ github.action_path }}/scripts/cleanup.sh

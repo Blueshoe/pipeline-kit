@@ -1,0 +1,11 @@
+{
+  "name": "security-scan-test-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Test fixture with intentionally vulnerable dependencies",
+  "dependencies": {
+    "lodash": "4.17.4",
+    "minimist": "0.0.8",
+    "node-fetch": "2.6.0"
+  }
+}

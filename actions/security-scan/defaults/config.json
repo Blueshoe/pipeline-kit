@@ -1,0 +1,12 @@
+{
+  "severity_levels": ["low", "medium", "high", "critical"],
+  "severity_order": {
+    "low": 0,
+    "medium": 1,
+    "high": 2,
+    "critical": 3
+  },
+  "max_summary_entries": 50,
+  "python_lock_files": ["uv.lock", "poetry.lock", "requirements.txt", "pyproject.toml"],
+  "npm_lock_files": ["package-lock.json"]
+}
