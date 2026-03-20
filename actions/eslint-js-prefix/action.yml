@@ -1,0 +1,132 @@
+# =============================================================================
+# ESLint JS Prefix Check
+# =============================================================================
+#
+# Enforces that JavaScript DOM selectors use a prefix (default: 'js-').
+# This decouples your JavaScript from CSS frameworks.
+#
+# Usage:
+#   - uses: Blueshoe/pipeline-kit/actions/eslint-js-prefix@v1
+#     with:
+#       working-directory: './src'
+#       allowed-patterns: '["^my-custom-"]'
+#
+# =============================================================================
+
+name: 'ESLint JS Prefix Check'
+description: 'Enforce js- prefix convention for DOM selectors'
+author: 'Blueshoe'
+
+branding:
+  icon: 'check-circle'
+  color: 'blue'
+
+# =============================================================================
+# INPUTS
+# =============================================================================
+
+inputs:
+  working-directory:
+    description: 'Directory to lint'
+    required: false
+    default: '.'
+
+  prefix:
+    description: 'Required prefix for DOM selectors'
+    required: false
+    default: 'js-'
+
+  severity:
+    description: 'Rule severity (error or warn)'
+    required: false
+    default: 'error'
+
+  allowed-patterns:
+    description: 'JSON array of regex patterns to allow (merged with auto-detected)'
+    required: false
+    default: '[]'
+
+  ignored-selectors:
+    description: 'JSON array of selectors to ignore'
+    required: false
+    default: '[]'
+
+  auto-detect:
+    description: 'Auto-detect frameworks from package.json'
+    required: false
+    default: 'true'
+
+# =============================================================================
+# OUTPUTS
+# =============================================================================
+
+outputs:
+  violations:
+    description: 'Number of violations found'
+    value: ${{ steps.lint.outputs.violations }}
+
+  has-violations:
+    description: 'Whether any violations were found'
+    value: ${{ steps.lint.outputs.has_violations }}
+
+# =============================================================================
+# STEPS
+# =============================================================================
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: '24'
+
+    - name: Detect frameworks
+      id: detect
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        USER_PATTERNS: ${{ inputs.allowed-patterns }}
+        AUTO_DETECT: ${{ inputs.auto-detect }}
+      run: ${{ github.action_path }}/scripts/detect-frameworks.sh
+
+    - name: Install ESLint
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        PLUGIN_PATH: ${{ github.action_path }}/plugin
+      run: ${{ github.action_path }}/scripts/install-eslint.sh
+
+    - name: Create ESLint config
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        INPUT_PREFIX: ${{ inputs.prefix }}
+        INPUT_SEVERITY: ${{ inputs.severity }}
+        INPUT_PATTERNS: ${{ steps.detect.outputs.patterns }}
+        INPUT_IGNORED: ${{ inputs.ignored-selectors }}
+      run: ${{ github.action_path }}/scripts/create-config.sh
+
+    - name: Run ESLint
+      id: lint
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        SEVERITY: ${{ inputs.severity }}
+      run: ${{ github.action_path }}/scripts/run-eslint.sh
+
+    - name: Create summary
+      if: always()
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        VIOLATIONS: ${{ steps.lint.outputs.violations }}
+        HAS_VIOLATIONS: ${{ steps.lint.outputs.has_violations }}
+        PREFIX: ${{ inputs.prefix }}
+      run: ${{ github.action_path }}/scripts/create-summary.sh
+
+    - name: Cleanup
+      if: always()
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: ${{ github.action_path }}/scripts/cleanup.sh
