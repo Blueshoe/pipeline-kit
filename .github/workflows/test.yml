@@ -221,11 +221,99 @@ jobs:
           echo "✅ Skip-all test passed"
 
   # ---------------------------------------------------------------------------
+  # Security Scan - Python Poetry (auto-detection)
+  # ---------------------------------------------------------------------------
+  security-scan-python-poetry:
+    name: Security Scan - Python (poetry)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install poetry
+        run: pip install poetry
+
+      - name: Run security scan on Poetry fixture
+        id: scan
+        uses: ./actions/security-scan
+        with:
+          working-directory: tests/fixtures/security-scan/python-poetry
+          scan-npm: 'false'
+          severity-threshold: 'low'
+
+      - name: Verify Poetry detection and results
+        run: |
+          COUNT="${{ steps.scan.outputs.total-vulnerabilities }}"
+          HAS="${{ steps.scan.outputs.has-vulnerabilities }}"
+
+          echo "Vulnerabilities: $COUNT"
+          echo "Has vulnerabilities: $HAS"
+
+          if [[ "$COUNT" -eq 0 ]]; then
+            echo "❌ Expected vulnerabilities > 0"
+            exit 1
+          fi
+
+          if [[ "$HAS" != "true" ]]; then
+            echo "❌ Expected has-vulnerabilities to be true"
+            exit 1
+          fi
+
+          echo "✅ Poetry scan test passed"
+
+  # ---------------------------------------------------------------------------
+  # Security Scan - Python uv (auto-detection)
+  # ---------------------------------------------------------------------------
+  security-scan-python-uv:
+    name: Security Scan - Python (uv)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Run security scan on uv fixture
+        id: scan
+        uses: ./actions/security-scan
+        with:
+          working-directory: tests/fixtures/security-scan/python-uv
+          scan-npm: 'false'
+          severity-threshold: 'low'
+
+      - name: Verify uv detection and results
+        run: |
+          COUNT="${{ steps.scan.outputs.total-vulnerabilities }}"
+          HAS="${{ steps.scan.outputs.has-vulnerabilities }}"
+
+          echo "Vulnerabilities: $COUNT"
+          echo "Has vulnerabilities: $HAS"
+
+          if [[ "$COUNT" -eq 0 ]]; then
+            echo "❌ Expected vulnerabilities > 0"
+            exit 1
+          fi
+
+          if [[ "$HAS" != "true" ]]; then
+            echo "❌ Expected has-vulnerabilities to be true"
+            exit 1
+          fi
+
+          echo "✅ uv scan test passed"
+
+  # ---------------------------------------------------------------------------
   # Final Check - All tests must pass
   # ---------------------------------------------------------------------------
   all-tests-passed:
     name: All Tests Passed
-    needs: [unit-tests, integration-tests, framework-detection, security-scan-python-pip, security-scan-npm, security-scan-skip-all]
+    needs: [unit-tests, integration-tests, framework-detection, security-scan-python-pip, security-scan-npm, security-scan-skip-all, security-scan-python-poetry, security-scan-python-uv]
     runs-on: ubuntu-latest
     steps:
       - run: echo "✅ All tests passed!"

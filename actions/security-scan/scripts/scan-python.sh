@@ -29,6 +29,19 @@ REQUIREMENTS_FILE=""
 DETECTED_PM="none"
 
 # =============================================================================
+# Helper: export requirements from poetry
+# =============================================================================
+poetry_export() {
+  local output_file="$1"
+  # Poetry 2.x requires the export plugin to be installed separately
+  if ! poetry self show plugins 2>/dev/null | grep -q "poetry-plugin-export"; then
+    echo "Installing poetry-plugin-export..."
+    poetry self add poetry-plugin-export 2>&1
+  fi
+  poetry export -f requirements.txt --without-hashes -o "$output_file"
+}
+
+# =============================================================================
 # Resolve requirements.txt
 # =============================================================================
 
@@ -55,7 +68,7 @@ elif [[ "$PACKAGE_MANAGER" != "auto" ]]; then
     poetry)
       echo "::group::Export requirements from poetry"
       REQUIREMENTS_FILE="/tmp/security-scan-requirements.txt"
-      poetry export -f requirements.txt --without-hashes -o "$REQUIREMENTS_FILE"
+      poetry_export "$REQUIREMENTS_FILE"
       echo "::endgroup::"
       DETECTED_PM="poetry"
       ;;
@@ -87,7 +100,7 @@ else
     echo "Detected poetry.lock"
     echo "::group::Export requirements from poetry"
     REQUIREMENTS_FILE="/tmp/security-scan-requirements.txt"
-    poetry export -f requirements.txt --without-hashes -o "$REQUIREMENTS_FILE"
+    poetry_export "$REQUIREMENTS_FILE"
     echo "::endgroup::"
     DETECTED_PM="poetry"
 
@@ -109,7 +122,7 @@ else
       echo "Found [tool.poetry] section"
       echo "::group::Export requirements from poetry"
       REQUIREMENTS_FILE="/tmp/security-scan-requirements.txt"
-      poetry export -f requirements.txt --without-hashes -o "$REQUIREMENTS_FILE"
+      poetry_export "$REQUIREMENTS_FILE"
       echo "::endgroup::"
       DETECTED_PM="poetry"
     else
