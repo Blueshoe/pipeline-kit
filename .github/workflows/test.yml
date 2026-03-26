@@ -350,18 +350,101 @@ jobs:
           echo "Container scan test passed"
 
   # ---------------------------------------------------------------------------
+  # Security Gitleaks - Detect secrets (dir mode on fixture)
+  # ---------------------------------------------------------------------------
+  security-gitleaks-detect:
+    name: Security Gitleaks - Detect
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run gitleaks on fixture with secrets
+        id: scan
+        uses: ./actions/security-gitleaks
+        continue-on-error: true
+        with:
+          scan-mode: 'dir'
+          working-directory: tests/fixtures/security-gitleaks/has-secrets
+          config: tests/fixtures/security-gitleaks/has-secrets/.gitleaks.toml
+          fail-on-leaks: 'true'
+
+      - name: Verify gitleaks detected secrets
+        run: |
+          COUNT="${{ steps.scan.outputs.leaks-found }}"
+          HAS="${{ steps.scan.outputs.has-leaks }}"
+          OUTCOME="${{ steps.scan.outcome }}"
+
+          echo "Leaks found: $COUNT"
+          echo "Has leaks: $HAS"
+          echo "Outcome: $OUTCOME"
+
+          if [[ "$COUNT" -eq 0 ]]; then
+            echo "Expected leaks > 0 for test fixture"
+            exit 1
+          fi
+
+          if [[ "$HAS" != "true" ]]; then
+            echo "Expected has-leaks to be true"
+            exit 1
+          fi
+
+          if [[ "$OUTCOME" != "failure" ]]; then
+            echo "Expected action to fail with fail-on-leaks=true"
+            exit 1
+          fi
+
+          echo "Gitleaks detection test passed"
+
+  # ---------------------------------------------------------------------------
+  # Security Gitleaks - Clean scan (no secrets)
+  # ---------------------------------------------------------------------------
+  security-gitleaks-clean:
+    name: Security Gitleaks - Clean
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run gitleaks on clean directory
+        id: scan
+        uses: ./actions/security-gitleaks
+        with:
+          scan-mode: 'dir'
+          working-directory: tests/fixtures/eslint-js-prefix/project-clean
+          fail-on-leaks: 'true'
+
+      - name: Verify clean scan
+        run: |
+          COUNT="${{ steps.scan.outputs.leaks-found }}"
+          HAS="${{ steps.scan.outputs.has-leaks }}"
+
+          echo "Leaks found: $COUNT"
+          echo "Has leaks: $HAS"
+
+          if [[ "$COUNT" -ne 0 ]]; then
+            echo "Expected no leaks in clean fixture"
+            exit 1
+          fi
+
+          if [[ "$HAS" != "false" ]]; then
+            echo "Expected has-leaks to be false"
+            exit 1
+          fi
+
+          echo "Gitleaks clean test passed"
+
+  # ---------------------------------------------------------------------------
   # Final Check - All tests must pass
   # ---------------------------------------------------------------------------
   all-tests-passed:
     name: All Tests Passed
-    needs: [unit-tests, integration-tests, framework-detection, security-scan-python-pip, security-scan-npm, security-scan-skip-all, security-scan-python-poetry, security-scan-python-uv, security-scan-webhook, security-scan-container]
+    needs: [unit-tests, integration-tests, framework-detection, security-scan-python-pip, security-scan-npm, security-scan-skip-all, security-scan-python-poetry, security-scan-python-uv, security-scan-webhook, security-scan-container, security-gitleaks-detect, security-gitleaks-clean]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Check required jobs
         run: |
           # Webhook test is optional (may lack secrets on PRs from forks)
-          REQUIRED='${{ needs.unit-tests.result }} ${{ needs.integration-tests.result }} ${{ needs.framework-detection.result }} ${{ needs.security-scan-python-pip.result }} ${{ needs.security-scan-npm.result }} ${{ needs.security-scan-skip-all.result }} ${{ needs.security-scan-python-poetry.result }} ${{ needs.security-scan-python-uv.result }} ${{ needs.security-scan-container.result }}'
+          REQUIRED='${{ needs.unit-tests.result }} ${{ needs.integration-tests.result }} ${{ needs.framework-detection.result }} ${{ needs.security-scan-python-pip.result }} ${{ needs.security-scan-npm.result }} ${{ needs.security-scan-skip-all.result }} ${{ needs.security-scan-python-poetry.result }} ${{ needs.security-scan-python-uv.result }} ${{ needs.security-scan-container.result }} ${{ needs.security-gitleaks-detect.result }} ${{ needs.security-gitleaks-clean.result }}'
 
           for result in $REQUIRED; do
             if [[ "$result" != "success" ]]; then

@@ -1,0 +1,9 @@
+title = "pipeline-kit gitleaks config"
+
+[extend]
+useDefault = true
+
+# Ignore test fixtures that intentionally contain fake secrets
+[[allowlists]]
+description = "Test fixtures with fake secrets"
+paths = ['''tests/fixtures/security-gitleaks/.*''']

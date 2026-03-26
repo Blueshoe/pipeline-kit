@@ -1,0 +1,11 @@
+title = "Test fixture config — detect EXAMPLE keys"
+
+[extend]
+useDefault = true
+
+# Override the default allowlist that ignores EXAMPLE keys
+[[rules]]
+id = "test-aws-access-key"
+description = "AWS Access Key (test)"
+regex = '''AKIA[0-9A-Z]{16}'''
+keywords = ["akia"]

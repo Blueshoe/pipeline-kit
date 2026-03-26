@@ -1,0 +1,150 @@
+# =============================================================================
+# Security Gitleaks
+# =============================================================================
+#
+# Scans a git repository for leaked secrets (API keys, tokens, passwords)
+# using gitleaks. Can scan full git history or just the working directory.
+#
+# Usage:
+#   - uses: Blueshoe/pipeline-kit/actions/security-gitleaks@v1
+#     with:
+#       scan-mode: 'git'
+#
+# =============================================================================
+
+name: 'Security Gitleaks'
+description: 'Scan git repository for leaked secrets'
+author: 'Blueshoe'
+
+branding:
+  icon: 'lock'
+  color: 'orange'
+
+# =============================================================================
+# INPUTS
+# =============================================================================
+
+inputs:
+  scan-mode:
+    description: 'Scan mode: git (full history) or dir (working directory only)'
+    required: false
+    default: 'git'
+
+  working-directory:
+    description: 'Working directory for scanning'
+    required: false
+    default: '.'
+
+  config:
+    description: 'Path to a custom .gitleaks.toml config file'
+    required: false
+    default: ''
+
+  baseline:
+    description: 'Path to a baseline JSON file (previously known findings to ignore)'
+    required: false
+    default: ''
+
+  redact:
+    description: 'Redact secrets in output (percentage 0-100, 0 = fully redacted)'
+    required: false
+    default: '0'
+
+  fail-on-leaks:
+    description: 'Fail the action if secrets are found'
+    required: false
+    default: 'true'
+
+  gitleaks-version:
+    description: 'Gitleaks version to install'
+    required: false
+    default: '8.30.1'
+
+  webhook-url:
+    description: 'Webhook API base URL to report results'
+    required: false
+    default: ''
+
+  webhook-api-key:
+    description: 'API key for webhook authentication (sent as X-API-Key header)'
+    required: false
+    default: ''
+
+  webhook-repository-url:
+    description: 'Git repository URL to include in the report (defaults to current GitHub repository)'
+    required: false
+    default: ''
+
+  webhook-release:
+    description: 'Release name to associate with the report'
+    required: false
+    default: ''
+
+# =============================================================================
+# OUTPUTS
+# =============================================================================
+
+outputs:
+  leaks-found:
+    description: 'Number of secrets/leaks found'
+    value: ${{ steps.summary.outputs.leaks_count }}
+
+  results-path:
+    description: 'Path to JSON results file'
+    value: ${{ steps.summary.outputs.results_path }}
+
+  has-leaks:
+    description: 'Whether any leaks were found'
+    value: ${{ steps.summary.outputs.has_leaks }}
+
+# =============================================================================
+# STEPS
+# =============================================================================
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install gitleaks
+      shell: bash
+      env:
+        GITLEAKS_VERSION: ${{ inputs.gitleaks-version }}
+      run: ${{ github.action_path }}/scripts/install-tools.sh
+
+    - name: Scan for secrets
+      id: scan
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        SCAN_MODE: ${{ inputs.scan-mode }}
+        CONFIG_PATH: ${{ inputs.config }}
+        BASELINE_PATH: ${{ inputs.baseline }}
+        REDACT: ${{ inputs.redact }}
+      run: ${{ github.action_path }}/scripts/scan-secrets.sh
+
+    - name: Create summary
+      id: summary
+      if: always()
+      shell: bash
+      env:
+        SCAN_MODE: ${{ inputs.scan-mode }}
+        LEAKS_RESULT: ${{ steps.scan.outputs.leaks_result_file }}
+        LEAKS_COUNT: ${{ steps.scan.outputs.leaks_count }}
+        FAIL_ON_LEAKS: ${{ inputs.fail-on-leaks }}
+        REDACT: ${{ inputs.redact }}
+      run: ${{ github.action_path }}/scripts/create-summary.sh
+
+    - name: Report to webhook
+      if: always() && inputs.webhook-url != '' && inputs.webhook-api-key != ''
+      shell: bash
+      env:
+        WEBHOOK_URL: ${{ inputs.webhook-url }}
+        WEBHOOK_API_KEY: ${{ inputs.webhook-api-key }}
+        WEBHOOK_REPOSITORY_URL: ${{ inputs.webhook-repository-url || format('{0}/{1}', github.server_url, github.repository) }}
+        WEBHOOK_RELEASE: ${{ inputs.webhook-release }}
+        LEAKS_RESULT: ${{ steps.scan.outputs.leaks_result_file }}
+      run: ${{ github.action_path }}/scripts/report-webhook.sh
+
+    - name: Cleanup
+      if: always()
+      shell: bash
+      run: ${{ github.action_path }}/scripts/cleanup.sh
