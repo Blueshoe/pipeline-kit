@@ -313,18 +313,55 @@ jobs:
           echo "✅ Webhook reporting test completed"
 
   # ---------------------------------------------------------------------------
+  # Security Scan - Container (public image, no auth needed)
+  # ---------------------------------------------------------------------------
+  security-scan-container:
+    name: Security Scan - Container
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run container scan on old Alpine image
+        id: scan
+        uses: ./actions/security-scan-container
+        with:
+          image: 'alpine:3.17.0'
+          registry-type: 'generic'
+          severity-threshold: 'low'
+
+      - name: Verify container results
+        run: |
+          COUNT="${{ steps.scan.outputs.container-vulnerabilities }}"
+          HAS="${{ steps.scan.outputs.has-vulnerabilities }}"
+
+          echo "Vulnerabilities: $COUNT"
+          echo "Has vulnerabilities: $HAS"
+
+          if [[ "$COUNT" -eq 0 ]]; then
+            echo "❌ Expected vulnerabilities > 0 for alpine:3.17.0"
+            exit 1
+          fi
+
+          if [[ "$HAS" != "true" ]]; then
+            echo "❌ Expected has-vulnerabilities to be true"
+            exit 1
+          fi
+
+          echo "Container scan test passed"
+
+  # ---------------------------------------------------------------------------
   # Final Check - All tests must pass
   # ---------------------------------------------------------------------------
   all-tests-passed:
     name: All Tests Passed
-    needs: [unit-tests, integration-tests, framework-detection, security-scan-python-pip, security-scan-npm, security-scan-skip-all, security-scan-python-poetry, security-scan-python-uv, security-scan-webhook]
+    needs: [unit-tests, integration-tests, framework-detection, security-scan-python-pip, security-scan-npm, security-scan-skip-all, security-scan-python-poetry, security-scan-python-uv, security-scan-webhook, security-scan-container]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Check required jobs
         run: |
           # Webhook test is optional (may lack secrets on PRs from forks)
-          REQUIRED='${{ needs.unit-tests.result }} ${{ needs.integration-tests.result }} ${{ needs.framework-detection.result }} ${{ needs.security-scan-python-pip.result }} ${{ needs.security-scan-npm.result }} ${{ needs.security-scan-skip-all.result }} ${{ needs.security-scan-python-poetry.result }} ${{ needs.security-scan-python-uv.result }}'
+          REQUIRED='${{ needs.unit-tests.result }} ${{ needs.integration-tests.result }} ${{ needs.framework-detection.result }} ${{ needs.security-scan-python-pip.result }} ${{ needs.security-scan-npm.result }} ${{ needs.security-scan-skip-all.result }} ${{ needs.security-scan-python-poetry.result }} ${{ needs.security-scan-python-uv.result }} ${{ needs.security-scan-container.result }}'
 
           for result in $REQUIRED; do
             if [[ "$result" != "success" ]]; then
