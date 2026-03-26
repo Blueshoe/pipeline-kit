@@ -365,6 +365,7 @@ jobs:
         with:
           scan-mode: 'dir'
           working-directory: tests/fixtures/security-gitleaks/has-secrets
+          config: .gitleaks.toml
           fail-on-leaks: 'true'
 
       - name: Verify gitleaks detected secrets

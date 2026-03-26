@@ -51,20 +51,23 @@ fi
 GITLEAKS_ARGS+=(".")
 
 echo "Running: gitleaks ${GITLEAKS_ARGS[*]}"
+echo "Working directory: $(pwd)"
 
 # ---------------------------------------------------------------------------
 # Run gitleaks
 # ---------------------------------------------------------------------------
 
 set +e
-gitleaks "${GITLEAKS_ARGS[@]}" 2>/tmp/gitleaks-stderr.log
+gitleaks "${GITLEAKS_ARGS[@]}" -v 2>/tmp/gitleaks-stderr.log
 GITLEAKS_EXIT=$?
 set -e
+
+echo "gitleaks exit code: $GITLEAKS_EXIT"
+cat /tmp/gitleaks-stderr.log || true
 
 # Exit codes: 0 = clean, 2 = leaks found (our custom), 1 = tool error
 if [[ $GITLEAKS_EXIT -eq 1 ]]; then
   echo "::error::gitleaks encountered an error"
-  cat /tmp/gitleaks-stderr.log || true
   echo "leaks_count=0" >> "$GITHUB_OUTPUT"
   echo "leaks_result_file=" >> "$GITHUB_OUTPUT"
   echo "::endgroup::"
