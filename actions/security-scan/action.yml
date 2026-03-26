@@ -1,0 +1,160 @@
+# =============================================================================
+# Security Scan
+# =============================================================================
+#
+# Scans Python and NPM dependencies for known vulnerabilities using osv-scanner.
+# Reads lock files directly — no package manager installation needed.
+#
+# Supported lock files:
+#   Python: requirements.txt, poetry.lock, uv.lock
+#   NPM:    package-lock.json
+#
+# Usage:
+#   - uses: Blueshoe/pipeline-kit/actions/security-scan@v1
+#     with:
+#       severity-threshold: 'high'
+#
+# =============================================================================
+
+name: 'Security Scan'
+description: 'Scan Python and NPM dependencies for known vulnerabilities'
+author: 'Blueshoe'
+
+branding:
+  icon: 'shield'
+  color: 'red'
+
+# =============================================================================
+# INPUTS
+# =============================================================================
+
+inputs:
+  scan-python:
+    description: 'Enable Python dependency scanning'
+    required: false
+    default: 'true'
+
+  scan-npm:
+    description: 'Enable NPM dependency scanning'
+    required: false
+    default: 'true'
+
+  working-directory:
+    description: 'Working directory for scanning'
+    required: false
+    default: '.'
+
+  severity-threshold:
+    description: 'Minimum severity to report: low, medium, high, critical'
+    required: false
+    default: 'high'
+
+  fail-on-vulnerabilities:
+    description: 'Fail the action if vulnerabilities are found'
+    required: false
+    default: 'false'
+
+  webhook-url:
+    description: 'Webhook API base URL to report results (e.g. https://watchdog.blueshoe.de)'
+    required: false
+    default: ''
+
+  webhook-api-key:
+    description: 'API key for webhook authentication (sent as X-API-Key header)'
+    required: false
+    default: ''
+
+  webhook-repository-url:
+    description: 'Git repository URL to include in the report (defaults to current GitHub repository)'
+    required: false
+    default: ''
+
+  webhook-release:
+    description: 'Release name to associate with the report'
+    required: false
+    default: ''
+
+# =============================================================================
+# OUTPUTS
+# =============================================================================
+
+outputs:
+  python-vulnerabilities:
+    description: 'Number of Python vulnerabilities found'
+    value: ${{ steps.summary.outputs.python_count }}
+
+  npm-vulnerabilities:
+    description: 'Number of NPM vulnerabilities found'
+    value: ${{ steps.summary.outputs.npm_count }}
+
+  total-vulnerabilities:
+    description: 'Total number of vulnerabilities found'
+    value: ${{ steps.summary.outputs.total_count }}
+
+  results-path:
+    description: 'Path to aggregated JSON results file'
+    value: ${{ steps.summary.outputs.results_path }}
+
+  has-vulnerabilities:
+    description: 'Whether any vulnerabilities were found'
+    value: ${{ steps.summary.outputs.has_vulnerabilities }}
+
+# =============================================================================
+# STEPS
+# =============================================================================
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install osv-scanner
+      shell: bash
+      run: ${{ github.action_path }}/scripts/install-tools.sh
+
+    - name: Scan dependencies
+      id: scan
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        SCAN_PYTHON: ${{ inputs.scan-python }}
+        SCAN_NPM: ${{ inputs.scan-npm }}
+        SEVERITY_THRESHOLD: ${{ inputs.severity-threshold }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: ${{ github.action_path }}/scripts/scan.sh
+
+    - name: Create summary
+      id: summary
+      if: always()
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        SCAN_PYTHON: ${{ inputs.scan-python }}
+        SCAN_NPM: ${{ inputs.scan-npm }}
+        PYTHON_RESULT: ${{ steps.scan.outputs.python_result_file }}
+        NPM_RESULT: ${{ steps.scan.outputs.npm_result_file }}
+        PYTHON_COUNT: ${{ steps.scan.outputs.python_count }}
+        NPM_COUNT: ${{ steps.scan.outputs.npm_count }}
+        SEVERITY_THRESHOLD: ${{ inputs.severity-threshold }}
+        FAIL_ON_VULNERABILITIES: ${{ inputs.fail-on-vulnerabilities }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: ${{ github.action_path }}/scripts/create-summary.sh
+
+    - name: Report to webhook
+      if: always() && inputs.webhook-url != '' && inputs.webhook-api-key != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        WEBHOOK_URL: ${{ inputs.webhook-url }}
+        WEBHOOK_API_KEY: ${{ inputs.webhook-api-key }}
+        WEBHOOK_REPOSITORY_URL: ${{ inputs.webhook-repository-url || format('{0}/{1}', github.server_url, github.repository) }}
+        WEBHOOK_RELEASE: ${{ inputs.webhook-release }}
+        SCAN_PYTHON: ${{ inputs.scan-python }}
+        SCAN_NPM: ${{ inputs.scan-npm }}
+        PYTHON_RESULT: ${{ steps.scan.outputs.python_result_file }}
+        NPM_RESULT: ${{ steps.scan.outputs.npm_result_file }}
+      run: ${{ github.action_path }}/scripts/report-webhook.sh
+
+    - name: Cleanup
+      if: always()
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: ${{ github.action_path }}/scripts/cleanup.sh

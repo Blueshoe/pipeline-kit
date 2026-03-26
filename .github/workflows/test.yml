@@ -103,11 +103,359 @@ jobs:
           # auto-detect: true (default) - should detect React and allow data-testid
 
   # ---------------------------------------------------------------------------
+  # Security Scan - Python pip (requirements.txt)
+  # ---------------------------------------------------------------------------
+  security-scan-python-pip:
+    name: Security Scan - Python (pip)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run security scan on Python fixture
+        id: scan
+        uses: ./actions/security-scan
+        with:
+          working-directory: tests/fixtures/security-scan/python-pip
+          scan-npm: 'false'
+          severity-threshold: 'low'
+
+      - name: Verify Python results
+        run: |
+          COUNT="${{ steps.scan.outputs.total-vulnerabilities }}"
+          HAS="${{ steps.scan.outputs.has-vulnerabilities }}"
+
+          echo "Vulnerabilities: $COUNT"
+          echo "Has vulnerabilities: $HAS"
+
+          if [[ "$COUNT" -eq 0 ]]; then
+            echo "❌ Expected vulnerabilities > 0"
+            exit 1
+          fi
+
+          if [[ "$HAS" != "true" ]]; then
+            echo "❌ Expected has-vulnerabilities to be true"
+            exit 1
+          fi
+
+          echo "✅ Python scan test passed"
+
+  # ---------------------------------------------------------------------------
+  # Security Scan - NPM
+  # ---------------------------------------------------------------------------
+  security-scan-npm:
+    name: Security Scan - NPM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run security scan on NPM fixture
+        id: scan
+        uses: ./actions/security-scan
+        with:
+          working-directory: tests/fixtures/security-scan/npm-vulnerable
+          scan-python: 'false'
+          severity-threshold: 'low'
+
+      - name: Verify NPM results
+        run: |
+          COUNT="${{ steps.scan.outputs.total-vulnerabilities }}"
+          HAS="${{ steps.scan.outputs.has-vulnerabilities }}"
+
+          echo "Vulnerabilities: $COUNT"
+          echo "Has vulnerabilities: $HAS"
+
+          if [[ "$COUNT" -eq 0 ]]; then
+            echo "❌ Expected vulnerabilities > 0"
+            exit 1
+          fi
+
+          if [[ "$HAS" != "true" ]]; then
+            echo "❌ Expected has-vulnerabilities to be true"
+            exit 1
+          fi
+
+          echo "✅ NPM scan test passed"
+
+  # ---------------------------------------------------------------------------
+  # Security Scan - Skip All
+  # ---------------------------------------------------------------------------
+  security-scan-skip-all:
+    name: Security Scan - Skip All
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run security scan with all scans disabled
+        id: scan
+        uses: ./actions/security-scan
+        with:
+          scan-python: 'false'
+          scan-npm: 'false'
+
+      - name: Verify skip results
+        run: |
+          COUNT="${{ steps.scan.outputs.total-vulnerabilities }}"
+          HAS="${{ steps.scan.outputs.has-vulnerabilities }}"
+
+          echo "Vulnerabilities: $COUNT"
+          echo "Has vulnerabilities: $HAS"
+
+          if [[ "$COUNT" -ne 0 ]]; then
+            echo "❌ Expected total = 0 when all scans skipped"
+            exit 1
+          fi
+
+          if [[ "$HAS" != "false" ]]; then
+            echo "❌ Expected has-vulnerabilities to be false"
+            exit 1
+          fi
+
+          echo "✅ Skip-all test passed"
+
+  # ---------------------------------------------------------------------------
+  # Security Scan - Python Poetry (auto-detection)
+  # ---------------------------------------------------------------------------
+  security-scan-python-poetry:
+    name: Security Scan - Python (poetry)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run security scan on Poetry fixture
+        id: scan
+        uses: ./actions/security-scan
+        with:
+          working-directory: tests/fixtures/security-scan/python-poetry
+          scan-npm: 'false'
+          severity-threshold: 'low'
+
+      - name: Verify Poetry detection and results
+        run: |
+          COUNT="${{ steps.scan.outputs.total-vulnerabilities }}"
+          HAS="${{ steps.scan.outputs.has-vulnerabilities }}"
+
+          echo "Vulnerabilities: $COUNT"
+          echo "Has vulnerabilities: $HAS"
+
+          if [[ "$COUNT" -eq 0 ]]; then
+            echo "❌ Expected vulnerabilities > 0"
+            exit 1
+          fi
+
+          if [[ "$HAS" != "true" ]]; then
+            echo "❌ Expected has-vulnerabilities to be true"
+            exit 1
+          fi
+
+          echo "✅ Poetry scan test passed"
+
+  # ---------------------------------------------------------------------------
+  # Security Scan - Python uv (auto-detection)
+  # ---------------------------------------------------------------------------
+  security-scan-python-uv:
+    name: Security Scan - Python (uv)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run security scan on uv fixture
+        id: scan
+        uses: ./actions/security-scan
+        with:
+          working-directory: tests/fixtures/security-scan/python-uv
+          scan-npm: 'false'
+          severity-threshold: 'low'
+
+      - name: Verify uv detection and results
+        run: |
+          COUNT="${{ steps.scan.outputs.total-vulnerabilities }}"
+          HAS="${{ steps.scan.outputs.has-vulnerabilities }}"
+
+          echo "Vulnerabilities: $COUNT"
+          echo "Has vulnerabilities: $HAS"
+
+          if [[ "$COUNT" -eq 0 ]]; then
+            echo "❌ Expected vulnerabilities > 0"
+            exit 1
+          fi
+
+          if [[ "$HAS" != "true" ]]; then
+            echo "❌ Expected has-vulnerabilities to be true"
+            exit 1
+          fi
+
+          echo "✅ uv scan test passed"
+
+  # ---------------------------------------------------------------------------
+  # Security Scan - Webhook reporting
+  # ---------------------------------------------------------------------------
+  security-scan-webhook:
+    name: Security Scan - Webhook
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run security scan with webhook reporting
+        id: scan
+        uses: ./actions/security-scan
+        with:
+          working-directory: tests/fixtures/security-scan/python-pip
+          severity-threshold: 'low'
+          webhook-url: ${{ vars.WATCHDOG_URL }}
+          webhook-api-key: ${{ secrets.WATCHDOG_API_KEY }}
+          webhook-release: ${{ github.sha }}
+
+      - name: Verify scan completed
+        run: |
+          COUNT="${{ steps.scan.outputs.total-vulnerabilities }}"
+          echo "Total vulnerabilities reported: $COUNT"
+          echo "✅ Webhook reporting test completed"
+
+  # ---------------------------------------------------------------------------
+  # Security Scan - Container (public image, no auth needed)
+  # ---------------------------------------------------------------------------
+  security-scan-container:
+    name: Security Scan - Container
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run container scan on old Alpine image
+        id: scan
+        uses: ./actions/security-scan-container
+        with:
+          image: 'alpine:3.17.0'
+          registry-type: 'generic'
+          severity-threshold: 'low'
+
+      - name: Verify container results
+        run: |
+          COUNT="${{ steps.scan.outputs.container-vulnerabilities }}"
+          HAS="${{ steps.scan.outputs.has-vulnerabilities }}"
+
+          echo "Vulnerabilities: $COUNT"
+          echo "Has vulnerabilities: $HAS"
+
+          if [[ "$COUNT" -eq 0 ]]; then
+            echo "❌ Expected vulnerabilities > 0 for alpine:3.17.0"
+            exit 1
+          fi
+
+          if [[ "$HAS" != "true" ]]; then
+            echo "❌ Expected has-vulnerabilities to be true"
+            exit 1
+          fi
+
+          echo "Container scan test passed"
+
+  # ---------------------------------------------------------------------------
+  # Security Gitleaks - Detect secrets (dir mode on fixture)
+  # ---------------------------------------------------------------------------
+  security-gitleaks-detect:
+    name: Security Gitleaks - Detect
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run gitleaks on fixture with secrets
+        id: scan
+        uses: ./actions/security-gitleaks
+        continue-on-error: true
+        with:
+          scan-mode: 'dir'
+          working-directory: tests/fixtures/security-gitleaks/has-secrets
+          config: .gitleaks.toml
+          fail-on-leaks: 'true'
+
+      - name: Verify gitleaks detected secrets
+        run: |
+          COUNT="${{ steps.scan.outputs.leaks-found }}"
+          HAS="${{ steps.scan.outputs.has-leaks }}"
+          OUTCOME="${{ steps.scan.outcome }}"
+
+          echo "Leaks found: $COUNT"
+          echo "Has leaks: $HAS"
+          echo "Outcome: $OUTCOME"
+
+          if [[ "$COUNT" -eq 0 ]]; then
+            echo "Expected leaks > 0 for test fixture"
+            exit 1
+          fi
+
+          if [[ "$HAS" != "true" ]]; then
+            echo "Expected has-leaks to be true"
+            exit 1
+          fi
+
+          if [[ "$OUTCOME" != "failure" ]]; then
+            echo "Expected action to fail with fail-on-leaks=true"
+            exit 1
+          fi
+
+          echo "Gitleaks detection test passed"
+
+  # ---------------------------------------------------------------------------
+  # Security Gitleaks - Clean scan (no secrets)
+  # ---------------------------------------------------------------------------
+  security-gitleaks-clean:
+    name: Security Gitleaks - Clean
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run gitleaks on clean directory
+        id: scan
+        uses: ./actions/security-gitleaks
+        with:
+          scan-mode: 'dir'
+          working-directory: tests/fixtures/eslint-js-prefix/project-clean
+          fail-on-leaks: 'true'
+
+      - name: Verify clean scan
+        run: |
+          COUNT="${{ steps.scan.outputs.leaks-found }}"
+          HAS="${{ steps.scan.outputs.has-leaks }}"
+
+          echo "Leaks found: $COUNT"
+          echo "Has leaks: $HAS"
+
+          if [[ "$COUNT" -ne 0 ]]; then
+            echo "Expected no leaks in clean fixture"
+            exit 1
+          fi
+
+          if [[ "$HAS" != "false" ]]; then
+            echo "Expected has-leaks to be false"
+            exit 1
+          fi
+
+          echo "Gitleaks clean test passed"
+
+  # ---------------------------------------------------------------------------
   # Final Check - All tests must pass
   # ---------------------------------------------------------------------------
   all-tests-passed:
     name: All Tests Passed
-    needs: [unit-tests, integration-tests, framework-detection]
+    needs: [unit-tests, integration-tests, framework-detection, security-scan-python-pip, security-scan-npm, security-scan-skip-all, security-scan-python-poetry, security-scan-python-uv, security-scan-webhook, security-scan-container, security-gitleaks-detect, security-gitleaks-clean]
+    if: always()
     runs-on: ubuntu-latest
     steps:
-      - run: echo "✅ All tests passed!"
+      - name: Check required jobs
+        run: |
+          # Webhook test is optional (may lack secrets on PRs from forks)
+          REQUIRED='${{ needs.unit-tests.result }} ${{ needs.integration-tests.result }} ${{ needs.framework-detection.result }} ${{ needs.security-scan-python-pip.result }} ${{ needs.security-scan-npm.result }} ${{ needs.security-scan-skip-all.result }} ${{ needs.security-scan-python-poetry.result }} ${{ needs.security-scan-python-uv.result }} ${{ needs.security-scan-container.result }} ${{ needs.security-gitleaks-detect.result }} ${{ needs.security-gitleaks-clean.result }}'
+
+          for result in $REQUIRED; do
+            if [[ "$result" != "success" ]]; then
+              echo "❌ A required job failed: $result"
+              exit 1
+            fi
+          done
+
+          WEBHOOK='${{ needs.security-scan-webhook.result }}'
+          if [[ "$WEBHOOK" == "failure" ]]; then
+            echo "⚠️ Webhook test failed (non-blocking)"
+          fi
+
+          echo "✅ All tests passed!"

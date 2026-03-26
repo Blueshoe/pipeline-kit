@@ -1,0 +1,4 @@
+# Intentionally pinned to versions with known vulnerabilities for testing
+Jinja2==2.10
+pyyaml==5.3.1
+certifi==2020.12.5

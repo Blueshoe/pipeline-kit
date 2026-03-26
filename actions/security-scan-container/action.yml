@@ -1,0 +1,180 @@
+# =============================================================================
+# Security Scan — Container Images
+# =============================================================================
+#
+# Scans container images for known vulnerabilities using osv-scanner.
+# Pulls the image from a registry and analyses installed OS packages and
+# language artifacts (Python, Node, Go, Java, Rust).
+#
+# Supported registries:
+#   Quay.io, AWS ECR, any Docker-compatible registry
+#
+# Supported OS packages:
+#   Alpine APK, Debian/Ubuntu dpkg
+#
+# Usage:
+#   - uses: Blueshoe/pipeline-kit/actions/security-scan-container@v1
+#     with:
+#       image: 'quay.io/blueshoe/my-app:latest'
+#       registry-type: 'quay'
+#       registry-username: ${{ secrets.QUAY_ROBOT }}
+#       registry-password: ${{ secrets.QUAY_ROBOT_TOKEN }}
+#
+# =============================================================================
+
+name: 'Security Scan — Container'
+description: 'Scan container images for known vulnerabilities'
+author: 'Blueshoe'
+
+branding:
+  icon: 'anchor'
+  color: 'red'
+
+# =============================================================================
+# INPUTS
+# =============================================================================
+
+inputs:
+  image:
+    description: 'Container image to scan (e.g. quay.io/blueshoe/my-app:latest)'
+    required: true
+
+  registry-type:
+    description: 'Registry type: quay, ecr, or generic (plain docker login)'
+    required: false
+    default: 'quay'
+
+  registry-username:
+    description: 'Registry username (Quay robot account or generic registry user)'
+    required: false
+    default: ''
+
+  registry-password:
+    description: 'Registry password or token'
+    required: false
+    default: ''
+
+  aws-access-key-id:
+    description: 'AWS access key ID (for ECR registry login)'
+    required: false
+    default: ''
+
+  aws-secret-access-key:
+    description: 'AWS secret access key (for ECR registry login)'
+    required: false
+    default: ''
+
+  aws-region:
+    description: 'AWS region for ECR (e.g. eu-central-1)'
+    required: false
+    default: 'eu-central-1'
+
+  severity-threshold:
+    description: 'Minimum severity to report: low, medium, high, critical'
+    required: false
+    default: 'high'
+
+  fail-on-vulnerabilities:
+    description: 'Fail the action if vulnerabilities are found'
+    required: false
+    default: 'false'
+
+  webhook-url:
+    description: 'Webhook API base URL to report results (e.g. https://watchdog.blueshoe.de)'
+    required: false
+    default: ''
+
+  webhook-api-key:
+    description: 'API key for webhook authentication (sent as X-API-Key header)'
+    required: false
+    default: ''
+
+  webhook-repository-url:
+    description: 'Git repository URL to include in the report (defaults to current GitHub repository)'
+    required: false
+    default: ''
+
+  webhook-release:
+    description: 'Release name to associate with the report'
+    required: false
+    default: ''
+
+# =============================================================================
+# OUTPUTS
+# =============================================================================
+
+outputs:
+  container-vulnerabilities:
+    description: 'Number of container image vulnerabilities found'
+    value: ${{ steps.summary.outputs.container_count }}
+
+  results-path:
+    description: 'Path to JSON results file'
+    value: ${{ steps.summary.outputs.results_path }}
+
+  has-vulnerabilities:
+    description: 'Whether any vulnerabilities were found'
+    value: ${{ steps.summary.outputs.has_vulnerabilities }}
+
+# =============================================================================
+# STEPS
+# =============================================================================
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install osv-scanner
+      shell: bash
+      run: ${{ github.action_path }}/scripts/install-tools.sh
+
+    - name: Login to container registry
+      id: registry-login
+      shell: bash
+      env:
+        CONTAINER_IMAGE: ${{ inputs.image }}
+        REGISTRY_TYPE: ${{ inputs.registry-type }}
+        REGISTRY_USERNAME: ${{ inputs.registry-username }}
+        REGISTRY_PASSWORD: ${{ inputs.registry-password }}
+        AWS_ACCESS_KEY_ID: ${{ inputs.aws-access-key-id }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.aws-secret-access-key }}
+        AWS_REGION: ${{ inputs.aws-region }}
+      run: ${{ github.action_path }}/scripts/registry-login.sh
+
+    - name: Scan container image
+      id: scan
+      shell: bash
+      env:
+        CONTAINER_IMAGE: ${{ inputs.image }}
+        SEVERITY_THRESHOLD: ${{ inputs.severity-threshold }}
+      run: ${{ github.action_path }}/scripts/scan-container.sh
+
+    - name: Create summary
+      id: summary
+      if: always()
+      shell: bash
+      env:
+        CONTAINER_IMAGE: ${{ inputs.image }}
+        CONTAINER_RESULT: ${{ steps.scan.outputs.container_result_file }}
+        CONTAINER_COUNT: ${{ steps.scan.outputs.container_count }}
+        SEVERITY_THRESHOLD: ${{ inputs.severity-threshold }}
+        FAIL_ON_VULNERABILITIES: ${{ inputs.fail-on-vulnerabilities }}
+      run: ${{ github.action_path }}/scripts/create-summary.sh
+
+    - name: Report to webhook
+      if: always() && inputs.webhook-url != '' && inputs.webhook-api-key != ''
+      shell: bash
+      env:
+        WEBHOOK_URL: ${{ inputs.webhook-url }}
+        WEBHOOK_API_KEY: ${{ inputs.webhook-api-key }}
+        WEBHOOK_REPOSITORY_URL: ${{ inputs.webhook-repository-url || format('{0}/{1}', github.server_url, github.repository) }}
+        WEBHOOK_RELEASE: ${{ inputs.webhook-release }}
+        CONTAINER_IMAGE: ${{ inputs.image }}
+        CONTAINER_RESULT: ${{ steps.scan.outputs.container_result_file }}
+      run: ${{ github.action_path }}/scripts/report-webhook.sh
+
+    - name: Cleanup
+      if: always()
+      shell: bash
+      env:
+        CONTAINER_IMAGE: ${{ inputs.image }}
+      run: ${{ github.action_path }}/scripts/cleanup.sh
